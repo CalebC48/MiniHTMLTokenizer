@@ -51,6 +51,13 @@ int main(int argc, char** argv) {
                 }
                 std::cout << "]";
             }
+        } else if (tok.type == TokenType::Comment) {
+            const auto& td = std::get<CommentData>(tok.data);
+            std::cout << " data=\"" << td.data << "\"";
+        } else if (tok.type == TokenType::Doctype) {
+            const auto& td = std::get<DoctypeData>(tok.data);
+            std::cout << " name=\"" << td.name << "\""
+                      << " valid=" << (td.is_valid ? "true" : "false");
         }
 
         std::cout << "\n";

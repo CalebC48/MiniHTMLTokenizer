@@ -24,6 +24,16 @@ std::string lower_ascii(std::string_view s) {
     return out;
 }
 
+bool iequals_ascii(std::string_view a, std::string_view b) {
+    if (a.size() != b.size()) return false;
+    for (std::size_t k = 0; k < a.size(); ++k) {
+        if (ascii_lower(static_cast<unsigned char>(a[k])) != ascii_lower(static_cast<unsigned char>(b[k]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool is_whitespace(unsigned char c) {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
 }
@@ -73,6 +83,25 @@ Token make_tag_token(bool is_start_tag, std::string name, bool self_closing, con
     tag.self_closing = self_closing;
     tag.is_start_tag = is_start_tag;
     t.data = std::move(tag);
+    return t;
+}
+
+Token make_comment_token(std::string data, const SourceLocation& start) {
+    Token t;
+    t.type = TokenType::Comment;
+    t.location = start;
+    t.data = CommentData{std::move(data)};
+    return t;
+}
+
+Token make_doctype_token(std::string name, bool is_valid, const SourceLocation& start) {
+    Token t;
+    t.type = TokenType::Doctype;
+    t.location = start;
+    DoctypeData d;
+    d.name = std::move(name);
+    d.is_valid = is_valid;
+    t.data = std::move(d);
     return t;
 }
 
@@ -131,6 +160,88 @@ TokenizerResult Tokenizer::tokenize(const std::string& input) const {
         if (i >= n) {
             result.tokens.push_back(make_text_token("<", tag_start));
             break;
+        }
+
+        // Markup declarations: comments and doctype.
+        if (peek() == '!') {
+            consume(); // '!'
+
+            // Comment: <!-- ... -->
+            if (i + 1 < n && peek() == '-' && peek(1) == '-') {
+                consume(); // '-'
+                consume(); // '-'
+
+                std::string data;
+                bool found_end = false;
+                while (i < n) {
+                    if (peek() == '-' && peek(1) == '-' && peek(2) == '>') {
+                        found_end = true;
+                        consume();
+                        consume();
+                        consume();
+                        break;
+                    }
+                    data.push_back(consume());
+                }
+
+                if (!found_end) {
+                    push_error(result.errors, "Unterminated comment", tag_start);
+                }
+
+                result.tokens.push_back(make_comment_token(std::move(data), tag_start));
+                continue;
+            }
+
+            // Doctype: <!DOCTYPE name> (case-insensitive)
+            const std::size_t word_begin = i;
+            while (i < n && ((peek() >= 'A' && peek() <= 'Z') || (peek() >= 'a' && peek() <= 'z'))) {
+                consume();
+            }
+            const std::size_t word_end = i;
+            const std::string_view word = std::string_view(input).substr(word_begin, word_end - word_begin);
+
+            if (iequals_ascii(word, "DOCTYPE")) {
+                skip_whitespace();
+
+                bool is_valid = true;
+                const SourceLocation name_loc = loc;
+                const std::size_t name_begin = i;
+                while (i < n && !is_whitespace(static_cast<unsigned char>(peek())) && peek() != '>') {
+                    consume();
+                }
+                const std::size_t name_end = i;
+                std::string name;
+                if (name_end == name_begin) {
+                    is_valid = false;
+                    push_error(result.errors, "Malformed doctype", name_loc);
+                } else {
+                    name = lower_ascii(std::string_view(input).substr(name_begin, name_end - name_begin));
+                }
+
+                skip_whitespace();
+                if (i >= n) {
+                    is_valid = false;
+                    push_error(result.errors, "Malformed doctype", tag_start);
+                    result.tokens.push_back(make_doctype_token(std::move(name), is_valid, tag_start));
+                    break;
+                }
+
+                if (peek() != '>') {
+                    is_valid = false;
+                    push_error(result.errors, "Malformed doctype", loc);
+                    while (i < n && peek() != '>') consume();
+                }
+
+                if (i < n && peek() == '>') consume();
+                result.tokens.push_back(make_doctype_token(std::move(name), is_valid, tag_start));
+                continue;
+            }
+
+            // Unknown markup declaration: recover by skipping to '>' or EOF.
+            push_error(result.errors, "Invalid markup declaration", tag_start);
+            while (i < n && peek() != '>') consume();
+            if (i < n && peek() == '>') consume();
+            continue;
         }
 
         const char next = peek();
