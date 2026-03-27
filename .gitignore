@@ -39,3 +39,18 @@
 
 # debug information files
 *.dwo
+
+# CMake build directories
+build/
+out/
+cmake-build-*/
+
+# Visual Studio / VS Code generated
+.vs/
+.vscode/
+
+# CMake tools generated
+CMakeFiles/
+CMakeCache.txt
+*.cmake
+compile_commands.json
