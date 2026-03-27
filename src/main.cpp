@@ -40,6 +40,17 @@ int main(int argc, char** argv) {
             const auto& td = std::get<TagData>(tok.data);
             std::cout << " name=\"" << td.name << "\""
                       << " selfClosing=" << (td.self_closing ? "true" : "false");
+            if (tok.type == TokenType::StartTag && !td.attributes.empty()) {
+                std::cout << " attrs=[";
+                bool first = true;
+                for (const auto& a : td.attributes) {
+                    if (!first) std::cout << ", ";
+                    first = false;
+                    std::cout << a.name;
+                    if (a.has_value) std::cout << "=\"" << a.value << "\"";
+                }
+                std::cout << "]";
+            }
         }
 
         std::cout << "\n";
