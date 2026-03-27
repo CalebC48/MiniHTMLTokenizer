@@ -8,6 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(mini_html_tokenizer
     src/main.cpp
+    src/output.cpp
     src/tokenizer.cpp
 )
 
